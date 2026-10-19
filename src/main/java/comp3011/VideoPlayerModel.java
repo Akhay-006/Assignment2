@@ -91,6 +91,7 @@ public class VideoPlayerModel {
 
     public VideoPlayerModel(
             boolean audioEnabled,
+            List<String> requestedEffects,
             BiConsumer<Integer, Integer> videoSizeChangedHandler,
             Consumer<Image> frameReadyHandler,
             Consumer<String> statusChangedHandler,
@@ -103,6 +104,30 @@ public class VideoPlayerModel {
         this.playbackStateChangedHandler = playbackStateChangedHandler;
         this.audioOutputStateChangedHandler = audioOutputStateChangedHandler;
         this.frameProcessors = new ArrayList<>();
+        for (String effect : requestedEffects) {
+            if ("n".equals(effect)) {
+                frameProcessors.add(new FrameNumberer());
+            } else if ("s".equals(effect)) {
+                frameProcessors.add(new FrameScratcher());
+            }else if ("f".equals(effect)) {
+                frameProcessors.add(new FrameFlickerer());
+            }else if ("w".equals(effect)) {
+                frameProcessors.add(new FrameBlackAndWhiter());
+            }else if ("y".equals(effect)) {
+                frameProcessors.add(new FrameYellower());
+            }else if ("v".equals(effect)) {
+                frameProcessors.add(new FrameVignetter());
+            }else if ("d".equals(effect)) {
+                frameProcessors.add(new FrameDuster());
+            }else if ("j".equals(effect)) {
+                frameProcessors.add(new FrameJitterer());
+            }else if ("m".equals(effect)) {
+                frameProcessors.add(new FrameMottler());
+            }else if ("b".equals(effect)) {
+                frameProcessors.add(new FrameBleeder());
+            }else if ("p".equals(effect)) {
+                frameProcessors.add(new FramePepperer());
+            }}
 //        frameProcessors.add(new FrameBleeder());
 //        frameProcessors.add(new FrameScratcher());
 //        frameProcessors.add(new FrameDuster());
