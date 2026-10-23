@@ -58,9 +58,15 @@ public class FrameMottler extends FrameProcessor {
 
     private final int instanceIndex;
     private int mediaSeed;
-    private int cachedDamageMaskSegment = Integer.MIN_VALUE;
-    private double[] damageMaskA;
-    private double[] damageMaskB;
+    private static class DamageMaskCache {
+        int segment = Integer.MIN_VALUE;
+        double[] maskA;
+        double[] maskB;
+    }
+
+    private final ThreadLocal<DamageMaskCache> damageMaskCache =
+            ThreadLocal.withInitial(DamageMaskCache::new);
+    
     private int[] xGridLeft;
     private double[] xGridBlend;
     private int[] yGridTop;
@@ -68,9 +74,8 @@ public class FrameMottler extends FrameProcessor {
     private byte[][] scaleLookups;
     private double minimumScale;
     private double maximumScale;
-    private int blockBlueScaleIndex;
-    private int blockGreenScaleIndex;
-    private int blockRedScaleIndex;
+    private final ThreadLocal<int[]> blockScaleIndices =
+            ThreadLocal.withInitial(() -> new int[3]);
 
     public FrameMottler() {
         super();
@@ -172,13 +177,19 @@ public class FrameMottler extends FrameProcessor {
     }
 
     private void ensureDamageMaskFields(int segment) {
-        if (segment == cachedDamageMaskSegment) {
+        DamageMaskCache cache = damageMaskCache.get();
+
+        if (segment == cache.segment) {
             return;
         }
 
-        cachedDamageMaskSegment = segment;
-        damageMaskA = buildNoiseField(segment, DAMAGE_MASK_SALT, DAMAGE_MASK_SMOOTHING_PASSES);
-        damageMaskB = buildNoiseField(segment + 1, DAMAGE_MASK_SALT, DAMAGE_MASK_SMOOTHING_PASSES);
+        cache.maskA = buildNoiseField(
+                segment, DAMAGE_MASK_SALT, DAMAGE_MASK_SMOOTHING_PASSES);
+
+        cache.maskB = buildNoiseField(
+                segment + 1, DAMAGE_MASK_SALT, DAMAGE_MASK_SMOOTHING_PASSES);
+
+        cache.segment = segment;
     }
 
     private double[] buildMultiScaleNoiseField(int frameNumber, int fieldSalt) {
@@ -327,10 +338,16 @@ public class FrameMottler extends FrameProcessor {
     }
 
     private double sampleDamageMask(int x, int y, double damageMaskBlend) {
-        double maskA = sampleField(damageMaskA, x, y);
-        double maskB = sampleField(damageMaskB, x, y);
+        DamageMaskCache cache = damageMaskCache.get();
+
+        double maskA = sampleField(cache.maskA, x, y);
+        double maskB = sampleField(cache.maskB, x, y);
+
         double mask = smoothstep(lerp(maskA, maskB, damageMaskBlend));
-        return smoothstep((mask - DAMAGE_MASK_THRESHOLD) / (1.0 - DAMAGE_MASK_THRESHOLD));
+
+        return smoothstep(
+                (mask - DAMAGE_MASK_THRESHOLD) /
+                (1.0 - DAMAGE_MASK_THRESHOLD));
     }
 
     private double sampleField(double[] field, int x, int y) {
@@ -363,9 +380,10 @@ public class FrameMottler extends FrameProcessor {
         double greenScale = brightnessScale * (1.0 + stainStrength * GREEN_STAIN_BOOST_PERCENTAGE / 100.0);
         double redScale = brightnessScale * (1.0 + stainStrength * RED_STAIN_BOOST_PERCENTAGE / 100.0);
 
-        blockBlueScaleIndex = scaleIndex(blueScale);
-        blockGreenScaleIndex = scaleIndex(greenScale);
-        blockRedScaleIndex = scaleIndex(redScale);
+        int[] indices = blockScaleIndices.get();
+        indices[0] = scaleIndex(blueScale);
+        indices[1] = scaleIndex(greenScale);
+        indices[2] = scaleIndex(redScale);
     }
 
     private void applyMottleBlock(
@@ -376,9 +394,11 @@ public class FrameMottler extends FrameProcessor {
             int blockYEnd,
             int channels,
             int stride) {
-        byte[] blueLookup = scaleLookups[blockBlueScaleIndex];
-        byte[] greenLookup = scaleLookups[blockGreenScaleIndex];
-        byte[] redLookup = scaleLookups[blockRedScaleIndex];
+    	int[] indices = blockScaleIndices.get();
+
+    	byte[] blueLookup = scaleLookups[indices[0]];
+    	byte[] greenLookup = scaleLookups[indices[1]];
+    	byte[] redLookup = scaleLookups[indices[2]];
 
         for (int y = blockY; y < blockYEnd; y++) {
             int rowStart = y * stride;

@@ -33,7 +33,7 @@ public class FrameJitterer extends FrameProcessor {
 
     private final int instanceIndex;
     private int mediaSeed;
-    private byte[] sourcePixels;
+    private final ThreadLocal<byte[]> sourcePixels = new ThreadLocal<>();
     private byte[] blackRow;
 
     public FrameJitterer() {
@@ -48,7 +48,7 @@ public class FrameJitterer extends FrameProcessor {
 
         int frameBytes = videoInfo.imageStride() * videoInfo.imageHeight();
         int widthBytes = videoInfo.imageWidth() * videoInfo.imageChannels();
-        sourcePixels = new byte[frameBytes];
+        sourcePixels.remove();
         blackRow = new byte[widthBytes];
     }
 
@@ -129,10 +129,16 @@ public class FrameJitterer extends FrameProcessor {
         int stride = videoInfo.imageStride();
         int frameBytes = stride * height;
         int widthBytes = width * channels;
+        byte[] localSourcePixels = sourcePixels.get();
+
+        if (localSourcePixels == null || localSourcePixels.length != frameBytes) {
+            localSourcePixels = new byte[frameBytes];
+            sourcePixels.set(localSourcePixels);
+        }
 
         ByteBuffer source = pixels.duplicate();
         source.clear();
-        source.get(sourcePixels, 0, frameBytes);
+        source.get(localSourcePixels, 0, frameBytes);
 
         for (int y = 0; y < height; y++) {
             ByteBuffer destinationRow = pixels.duplicate();
@@ -160,7 +166,7 @@ public class FrameJitterer extends FrameProcessor {
             ByteBuffer destination = pixels.duplicate();
             destination.clear();
             destination.position(destinationIndex);
-            destination.put(sourcePixels, sourceIndex, rowBytesToCopy);
+            destination.put(localSourcePixels, sourceIndex, rowBytesToCopy);
         }
     }
 }
